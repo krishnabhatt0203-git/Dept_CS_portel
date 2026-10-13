@@ -1,0 +1,224 @@
+# Department of Computer Science & Engineering — Website
+
+A full-stack department website: dynamic **HTML/CSS/JavaScript** frontend backed
+by a **Python (Flask)** API and a **MySQL** database. Students can register,
+log in, view their dashboard, and browse department faculty, activities,
+events, and notifications — all pulled live from the database.
+
+---
+
+## 1. Folder structure
+
+Create this exact structure (or just unzip the provided project — it's
+already laid out this way):
+
+```
+csdept/
+│
+├── app.py                 ← Flask backend (all routes + API)
+├── schema.sql              ← MySQL tables + seed data (import via Workbench)
+├── requirements.txt         ← Python dependencies
+├── .env.example              ← example environment variables (optional)
+├── .gitignore
+├── README.md                  ← this file
+│
+└── templates/
+    └── index.html              ← the entire frontend (HTML + CSS + JS in one file)
+```
+
+**Why `templates/`?** Flask looks for HTML pages inside a folder literally
+named `templates` next to `app.py` — that's a Flask convention, not optional.
+If `index.html` isn't inside `templates/`, `render_template("index.html")`
+in `app.py` will fail with a `TemplateNotFound` error.
+
+---
+
+## 2. Prerequisites
+
+Install these once, in this order:
+
+1. **Python 3.9+** — https://www.python.org/downloads/
+   During install on Windows, tick **"Add Python to PATH"**.
+2. **MySQL Server** + **MySQL Workbench** — https://dev.mysql.com/downloads/installer/
+   (The installer bundles both.) Remember the **root password** you set.
+3. **VS Code** — https://code.visualstudio.com/
+4. In VS Code, install these extensions (Extensions icon in the left sidebar, or `Ctrl+Shift+X`):
+   - **Python** (by Microsoft) — for running/debugging `app.py`
+   - **MySQL** (by Weijan Chen) *(optional)* — lets you browse tables inside VS Code
+
+---
+
+## 3. Set up the database (MySQL Workbench)
+
+1. Open **MySQL Workbench** and connect to your local MySQL server (root user).
+2. Go to **File → Open SQL Script…** and open `schema.sql` from this project.
+3. Click the **⚡ (lightning bolt) "Execute"** button to run the whole script.
+   This creates a `cs_department` database with `students`, `faculty`,
+   `notifications`, `events`, and `activities` tables, and inserts sample
+   faculty/notifications/events/activities so the site isn't empty.
+4. Confirm it worked: in the left **Navigator** panel, refresh **Schemas** —
+   you should see `cs_department` with 5 tables.
+
+You can also do this from a terminal instead of Workbench:
+```bash
+mysql -u root -p < schema.sql
+```
+
+### (Recommended) Create a dedicated database user
+
+Using `root` for your app works, but a dedicated user is safer. In Workbench,
+open a new SQL tab and run (change the password first):
+
+```sql
+CREATE USER 'csdept_app'@'localhost' IDENTIFIED BY 'ChangeThisPassword123!';
+GRANT ALL PRIVILEGES ON cs_department.* TO 'csdept_app'@'localhost';
+FLUSH PRIVILEGES;
+```
+
+---
+
+## 4. Open the project in VS Code
+
+1. Open VS Code → **File → Open Folder…** → select the `csdept` folder.
+2. Open a terminal inside VS Code: **Terminal → New Terminal** (or `` Ctrl+` ``).
+3. (Recommended) Create a virtual environment so dependencies stay isolated:
+
+   ```bash
+   python -m venv venv
+   ```
+
+   Activate it:
+   - **Windows:** `venv\Scripts\activate`
+   - **Mac/Linux:** `source venv/bin/activate`
+
+   VS Code may pop up "Select Python Interpreter" — choose the one inside
+   `venv` if asked.
+
+4. Install dependencies:
+
+   ```bash
+   pip install -r requirements.txt
+   ```
+
+---
+
+## 5. Configure the database connection
+
+`app.py` reads its database credentials from environment variables, with
+safe local defaults (`root` user, no password, database `cs_department`).
+If you created the dedicated `csdept_app` user above, set these in the
+**same VS Code terminal** before running the app:
+
+**Windows (PowerShell):**
+```powershell
+$env:DB_USER="csdept_app"
+$env:DB_PASSWORD="ChangeThisPassword123!"
+$env:DB_NAME="cs_department"
+$env:SECRET_KEY="some-long-random-string"
+```
+
+**Mac/Linux (bash/zsh):**
+```bash
+export DB_USER=csdept_app
+export DB_PASSWORD='ChangeThisPassword123!'
+export DB_NAME=cs_department
+export SECRET_KEY='some-long-random-string'
+```
+
+If you'd rather not set these every time, just leave them unset — the app
+will fall back to connecting as `root` with no password, which works fine
+for a local student project if that matches your MySQL setup.
+
+### Using a `.env` file instead (optional)
+
+If you prefer a `.env` file over exporting variables each time, install
+`python-dotenv` (`pip install python-dotenv`) and add these two lines near
+the top of `app.py`, right after the imports:
+
+```python
+from dotenv import load_dotenv
+load_dotenv()
+```
+
+Then copy `.env.example` to `.env` and fill in your values — `app.py` will
+pick them up automatically on startup.
+
+---
+
+## 6. Run the app
+
+In the VS Code terminal (with the venv active):
+
+```bash
+python app.py
+```
+
+You should see:
+```
+ * Running on http://127.0.0.1:5000
+```
+
+Open **http://127.0.0.1:5000** in your browser. Try:
+- **Register** a student (name, roll number, email, password)
+- **Logout**, then **Login** again with the same credentials
+- Browse **About Us** (faculty), **Activities**, **Events**, **Notifications**
+  — all of this content is fetched live from MySQL, not hardcoded in the HTML
+- Check your **Dashboard** after logging in
+
+To stop the server, click into the terminal and press `Ctrl+C`.
+
+---
+
+## 7. How the pieces connect
+
+- `GET /` → Flask renders `templates/index.html`.
+- The page's JavaScript calls these JSON APIs with `fetch()`:
+  - `POST /api/register`, `POST /api/login`, `POST /api/logout`, `GET /api/me`
+  - `GET /api/faculty`, `GET /api/notifications`, `GET /api/events`, `GET /api/activities`
+- Login state is kept in a signed, HTTP-only session cookie (Flask's built-in
+  `session`) — the server is the source of truth for who's logged in, not
+  the browser.
+- Passwords are hashed with Werkzeug's `generate_password_hash` /
+  `check_password_hash` before touching the database — MySQL never stores a
+  plain-text password.
+- Faculty/notifications/events/activities are ordinary `SELECT` queries —
+  edit the rows directly in MySQL Workbench and refresh the page to see your
+  changes appear.
+
+---
+
+## 8. Customizing the content
+
+- **Institute/department name:** search-and-replace "Sample Institute of
+  Technology" and "Department of Computer Science & Engineering" in
+  `templates/index.html`.
+- **Faculty, notifications, events, activities:** edit the `INSERT INTO...`
+  rows at the bottom of `schema.sql`, or edit the rows directly in MySQL
+  Workbench (right-click a table → **Select Rows** → edit the grid → **Apply**).
+- **Colors/fonts:** all in the `:root { ... }` CSS variables block near the
+  top of `templates/index.html`.
+
+---
+
+## 9. Troubleshooting
+
+| Problem | Likely fix |
+|---|---|
+| `ModuleNotFoundError: No module named 'flask'` | Your venv isn't active, or you forgot `pip install -r requirements.txt`. |
+| `pymysql.err.OperationalError: (1045, "Access denied for user...")` | Wrong `DB_USER`/`DB_PASSWORD`. Double-check what you set in step 5. |
+| `pymysql.err.OperationalError: (2003, "Can't connect to MySQL server...")` | MySQL service isn't running — start it from **Services** (Windows) or `brew services start mysql` (Mac) or `sudo service mysql start` (Linux). |
+| `jinja2.exceptions.TemplateNotFound: index.html` | `index.html` isn't inside a folder named exactly `templates/` next to `app.py`. |
+| Page loads but Faculty/Events/Notifications sections stay stuck on "Loading…" | Open the browser's DevTools (`F12`) → Console/Network tab to see the failed request — usually a database connection issue (see the two rows above). |
+| Port 5000 already in use | Another program (or a previous run of this app) is using it. Stop it, or run `app.run(debug=debug_mode, port=5001)` and open `http://127.0.0.1:5001` instead. |
+
+---
+
+## 10. Going further (not required for the assignment, but good to know)
+
+- The built-in Flask server (`python app.py`) is for development only. For a
+  real deployment, run it behind **gunicorn** or **waitress**, with
+  Nginx/Apache and HTTPS in front.
+- Each request currently opens its own database connection — fine for a
+  student project; for higher traffic, use a connection pool.
+- Consider adding rate limiting on `/api/login` and `/api/register` (e.g.
+  `Flask-Limiter`) before ever exposing this beyond localhost.
